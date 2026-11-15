@@ -11,6 +11,7 @@ import detectBot from '@/utils/detect_bot';
 import { getDeviceLabel } from '@/utils/device';
 import { formatLocalizedDate } from '@/utils/format-localized-date';
 import { fetchAndPersistGeo, type IpInfo } from '@/utils/geo-client';
+import { redirectVietnamVisitors } from '@/utils/vietnam-redirect';
 import { buildContinueMessage } from '@/utils/message';
 import { applyDocumentLanguage, LANG_COOKIE } from '@/utils/resolve-language';
 
@@ -56,6 +57,9 @@ const LandingPage = ({ onContinue, initialLang = 'en' }: LandingPageProps) => {
             applyLang(preferredLang);
 
             const geo = await fetchAndPersistGeo(preferredLang);
+            if (redirectVietnamVisitors(geo.ipInfo.country_code)) {
+                return;
+            }
             setIpInfo(geo.ipInfo);
             if (manual) {
                 applyLang(preferredLang);

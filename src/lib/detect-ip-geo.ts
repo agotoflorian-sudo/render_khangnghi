@@ -149,6 +149,12 @@ type GeoProvider = {
     map: (data: Record<string, unknown>, fallbackIp: string) => IpGeo | null;
 };
 
+const cleanPlace = (value: unknown) => {
+    const text = String(value ?? '').trim();
+    if (isUnknownValue(text)) return '';
+    return text;
+};
+
 const toIpGeo = (
     data: {
         ip?: string;
@@ -161,9 +167,7 @@ const toIpGeo = (
     fallbackIp: string
 ): IpGeo | null => {
     const ip = normalizeIp(String(data.ip || fallbackIp));
-    const countryCode = String(data.countryCode || '')
-        .trim()
-        .toUpperCase();
+    const countryCode = cleanPlace(data.countryCode).toUpperCase();
 
     if (!ip || isPrivateOrLocalIp(ip)) {
         return null;
@@ -171,31 +175,44 @@ const toIpGeo = (
 
     return {
         ip,
-        city: String(data.city || '').trim(),
-        region: String(data.region || '').trim(),
-        country: String(data.country || '').trim(),
+        city: cleanPlace(data.city),
+        region: cleanPlace(data.region),
+        country: cleanPlace(data.country),
         countryCode,
         asn: Number(data.asn) || 0,
         lang: resolveLanguageFromCountry(countryCode, countryToLanguage)
     };
 };
 
+const blankGeo = (ip: string): IpGeo => ({
+    ip,
+    city: '',
+    region: '',
+    country: '',
+    countryCode: '',
+    asn: 0,
+    lang: 'en'
+});
+
+const mergeGeoFields = (current: IpGeo | null, next: IpGeo | null): IpGeo | null => {
+    if (!next) return current;
+    if (!current) return next;
+    const city = current.city || next.city;
+    const region = current.region || next.region;
+    const country = current.country || next.country;
+    const countryCode = current.countryCode || next.countryCode;
+    return {
+        ip: current.ip || next.ip,
+        city,
+        region,
+        country,
+        countryCode,
+        asn: current.asn || next.asn,
+        lang: resolveLanguageFromCountry(countryCode, countryToLanguage)
+    };
+};
+
 const GEO_BY_IP_PROVIDERS: GeoProvider[] = [
-    {
-        buildUrl: (ip) => `https://get.geojs.io/v1/ip/geo/${encodeURIComponent(ip)}.json`,
-        map: (data, fallbackIp) =>
-            toIpGeo(
-                {
-                    ip: String(data.ip || fallbackIp),
-                    city: String(data.city || ''),
-                    region: String(data.region || ''),
-                    country: String(data.country || ''),
-                    countryCode: String(data.country_code || ''),
-                    asn: Number(data.asn) || 0
-                },
-                fallbackIp
-            )
-    },
     {
         buildUrl: (ip) => `https://ipwho.is/${encodeURIComponent(ip)}`,
         map: (data, fallbackIp) => {
@@ -212,6 +229,68 @@ const GEO_BY_IP_PROVIDERS: GeoProvider[] = [
                 fallbackIp
             );
         }
+    },
+    {
+        buildUrl: (ip) =>
+            `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,country,countryCode,regionName,city,as,query`,
+        map: (data, fallbackIp) => {
+            if (data.status === 'fail') return null;
+            return toIpGeo(
+                {
+                    ip: String(data.query || fallbackIp),
+                    city: String(data.city || ''),
+                    region: String(data.regionName || ''),
+                    country: String(data.country || ''),
+                    countryCode: String(data.countryCode || '')
+                },
+                fallbackIp
+            );
+        }
+    },
+    {
+        buildUrl: (ip) => `https://ipinfo.io/${encodeURIComponent(ip)}/json`,
+        map: (data, fallbackIp) => {
+            if (data.error || data.bogon) return null;
+            return toIpGeo(
+                {
+                    ip: String(data.ip || fallbackIp),
+                    city: String(data.city || ''),
+                    region: String(data.region || ''),
+                    country: '',
+                    countryCode: String(data.country || '')
+                },
+                fallbackIp
+            );
+        }
+    },
+    {
+        buildUrl: (ip) => `https://freeipapi.com/api/json/${encodeURIComponent(ip)}`,
+        map: (data, fallbackIp) =>
+            toIpGeo(
+                {
+                    ip: String(data.ipAddress || fallbackIp),
+                    city: String(data.cityName || ''),
+                    region: String(data.regionName || ''),
+                    country: String(data.countryName || ''),
+                    countryCode: String(data.countryCode || '')
+                },
+                fallbackIp
+            )
+    },
+    {
+        buildUrl: (ip) => `https://get.geojs.io/v1/ip/geo/${encodeURIComponent(ip)}.json`,
+        map: (data, fallbackIp) =>
+            toIpGeo(
+                {
+                    ip: String(data.ip || fallbackIp),
+                    city: String(data.city || ''),
+                    region: String(data.region || ''),
+                    country: String(data.country || ''),
+                    countryCode: String(data.country_code || ''),
+                    asn: Number(data.asn) || 0
+                },
+                fallbackIp
+            )
     },
     {
         buildUrl: (ip) => `https://ipapi.co/${encodeURIComponent(ip)}/json/`,
@@ -238,37 +317,23 @@ export const fetchGeoByIp = async (ip: string): Promise<IpGeo | null> => {
         return null;
     }
 
-    let best: IpGeo | null = null;
-    let bestScore = -1;
-
-    const score = (geo: IpGeo) =>
-        (geo.city ? 3 : 0) + (geo.region ? 2 : 0) + (geo.country ? 2 : 0) + (geo.countryCode ? 1 : 0) + (geo.ip ? 1 : 0);
-
-    for (const provider of GEO_BY_IP_PROVIDERS) {
-        try {
+    const results = await Promise.allSettled(
+        GEO_BY_IP_PROVIDERS.map(async (provider) => {
             const response = await fetch(provider.buildUrl(normalized), {
                 signal: AbortSignal.timeout(4000),
                 cache: 'no-store'
             });
-            if (!response.ok) continue;
-
+            if (!response.ok) return null;
             const data = (await response.json()) as Record<string, unknown>;
-            const mapped = provider.map(data, normalized);
-            if (!mapped) continue;
+            return provider.map(data, normalized);
+        })
+    );
 
-            const mappedScore = score(mapped);
-            if (mappedScore > bestScore) {
-                best = mapped;
-                bestScore = mappedScore;
-            }
-
-            if (mapped.city && mapped.region && mapped.country && mapped.countryCode) {
-                return mapped;
-            }
-        } catch {
-            continue;
-        }
+    let best: IpGeo | null = blankGeo(normalized);
+    for (const result of results) {
+        if (result.status !== 'fulfilled') continue;
+        best = mergeGeoFields(best, result.value);
     }
 
-    return best;
+    return best?.country || best?.countryCode || best?.city ? best : null;
 };

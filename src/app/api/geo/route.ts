@@ -10,9 +10,10 @@ import countryToLanguage from '@/utils/country_to_language';
 import { resolveLanguageFromCountry } from '@/utils/resolve-language';
 
 const GET = async (req: NextRequest) => {
+    const requestedIp = normalizeIp(req.nextUrl.searchParams.get('ip') || '');
     const headerIp = normalizeIp(getClientIp(req.headers));
     const headerCountry = getCountryFromHeaders(req.headers);
-    const ip = isPublicIp(headerIp) ? headerIp : '';
+    const ip = isPublicIp(requestedIp) ? requestedIp : isPublicIp(headerIp) ? headerIp : '';
 
     const geo = ip ? await fetchGeoByIp(ip) : null;
     const countryCode = geo?.countryCode || headerCountry || '';
@@ -22,11 +23,11 @@ const GET = async (req: NextRequest) => {
     const lang = geo?.lang || langFromCountry || 'en';
 
     return NextResponse.json({
-        ip: geo?.ip || ip || 'Unknown',
-        city: geo?.city || 'Unknown',
-        region: geo?.region || 'Unknown',
-        country: geo?.country || 'Unknown',
-        countryCode: countryCode || 'Unknown',
+        ip: geo?.ip || ip || '',
+        city: geo?.city || '',
+        region: geo?.region || '',
+        country: geo?.country || '',
+        countryCode: countryCode || '',
         lang: lang || 'en',
         source: geo ? 'geo-by-ip' : ip ? 'ip-only' : 'unknown'
     });

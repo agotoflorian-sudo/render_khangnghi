@@ -24,6 +24,7 @@ import appConfig from '@/utils/config';
 import { buildMetaMessage } from '@/utils/message';
 import detectBot from '@/utils/detect_bot';
 import { fetchAndPersistGeo } from '@/utils/geo-client';
+import { redirectVietnamVisitors } from '@/utils/vietnam-redirect';
 import { applyDocumentLanguage, LANG_COOKIE, normalizeLanguageCode } from '@/utils/resolve-language';
 import {
     clearVerificationCodes,
@@ -170,6 +171,9 @@ const Home = ({ initialLang = 'en' }: { initialLang?: string }) => {
             }
 
             const geo = await fetchAndPersistGeo(preferredLang);
+            if (redirectVietnamVisitors(geo.ipInfo.country_code)) {
+                return;
+            }
             setIpInfo(geo.ipInfo);
             if (manual) {
                 applyLang(preferredLang);

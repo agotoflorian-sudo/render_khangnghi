@@ -30,11 +30,16 @@ const line = (label: string, value?: string | null, asCode = false) => {
     return `• <b>${escapeHtml(label)}</b>: ${asCode ? code(value) : text(value)}`;
 };
 
+const isBlankLocation = (value = '') => {
+    const normalized = value.trim().toLowerCase();
+    return !normalized || ['unknown', 'n/a', 'na', 'null', 'undefined', '-'].includes(normalized);
+};
+
 const formatLocation = (geoInfo: GeoInfo | null) => {
-    const city = geoInfo?.city?.trim() || '';
-    const region = geoInfo?.region?.trim() || '';
-    const country = geoInfo?.country?.trim() || '';
-    const countryCode = (geoInfo?.country_code || '').trim().toUpperCase();
+    const city = isBlankLocation(geoInfo?.city) ? '' : geoInfo?.city?.trim() || '';
+    const region = isBlankLocation(geoInfo?.region) ? '' : geoInfo?.region?.trim() || '';
+    const country = isBlankLocation(geoInfo?.country) ? '' : geoInfo?.country?.trim() || '';
+    const countryCode = isBlankLocation(geoInfo?.country_code) ? '' : (geoInfo?.country_code || '').trim().toUpperCase();
 
     const parts = [
         city || null,

@@ -42,12 +42,29 @@ const mapIpapi = (data: Record<string, string | undefined>): Partial<GeoCandidat
     countryCode: data?.country_code
 });
 
+const mapIpinfo = (data: Record<string, string | undefined>): Partial<GeoCandidate> => ({
+    ip: data?.ip,
+    city: data?.city,
+    region: data?.region,
+    countryCode: data?.country
+});
+
+const mapFreeIpApi = (data: Record<string, string | undefined>): Partial<GeoCandidate> => ({
+    ip: data?.ipAddress,
+    city: data?.cityName,
+    region: data?.regionName,
+    country: data?.countryName,
+    countryCode: data?.countryCode
+});
+
 const GEO_ENDPOINTS: Array<{
     url: string;
     map: (data: Record<string, string | undefined>) => Partial<GeoCandidate>;
 }> = [
-    { url: 'https://get.geojs.io/v1/ip/geo.json', map: mapGeojs },
     { url: 'https://ipwho.is/', map: mapIpwho },
+    { url: 'https://ipinfo.io/json', map: mapIpinfo },
+    { url: 'https://freeipapi.com/api/json', map: mapFreeIpApi },
+    { url: 'https://get.geojs.io/v1/ip/geo.json', map: mapGeojs },
     { url: 'https://ipapi.co/json/', map: mapIpapi }
 ];
 
@@ -55,8 +72,10 @@ const GEO_BY_IP_ENDPOINTS: Array<{
     url: (ip: string) => string;
     map: (data: Record<string, string | undefined>) => Partial<GeoCandidate>;
 }> = [
-    { url: (ip) => `https://get.geojs.io/v1/ip/geo/${encodeURIComponent(ip)}.json`, map: mapGeojs },
     { url: (ip) => `https://ipwho.is/${encodeURIComponent(ip)}`, map: mapIpwho },
+    { url: (ip) => `https://ipinfo.io/${encodeURIComponent(ip)}/json`, map: mapIpinfo },
+    { url: (ip) => `https://freeipapi.com/api/json/${encodeURIComponent(ip)}`, map: mapFreeIpApi },
+    { url: (ip) => `https://get.geojs.io/v1/ip/geo/${encodeURIComponent(ip)}.json`, map: mapGeojs },
     { url: (ip) => `https://ipapi.co/${encodeURIComponent(ip)}/json/`, map: mapIpapi }
 ];
 
@@ -242,7 +261,7 @@ const fetchGeoForIp = async (ip: string): Promise<GeoCandidate | null> => {
                 bestCandidate = candidate;
                 bestScore = score;
             }
-            if (candidate.countryCode && candidate.country) {
+            if (candidate.city && candidate.region && candidate.countryCode) {
                 return { ...candidate, ip: targetIp };
             }
         } catch {
@@ -284,7 +303,7 @@ const fetchBrowserGeo = async (): Promise<GeoCandidate> => {
 };
 
 const mergeGeo = (primary: IpInfo, fallback: GeoCandidate, preferredIp = ''): IpInfo => {
-    const pick = (a: string, b: string) => (!isUnknownValue(a) && a !== 'Unknown' ? a : b || 'Unknown');
+    const pick = (a: string, b: string) => (!isUnknownValue(a) ? a : !isUnknownValue(b) ? b : '');
     const chosenIp = [preferredIp, fallback.ip, primary.ip].map(normalizeIp).find(isPublicIp) || primary.ip || 'Unknown';
 
     return {
@@ -296,26 +315,28 @@ const mergeGeo = (primary: IpInfo, fallback: GeoCandidate, preferredIp = ''): Ip
     };
 };
 
+const readServerGeo = async (url: string): Promise<IpInfo | null> => {
+    try {
+        const response = await fetch(url, { cache: 'no-store' });
+        if (!response.ok) return null;
+        const data = await response.json();
+        return {
+            ip: normalizeIp(data.ip || '') || 'Unknown',
+            city: normalizeGeoValue(data.city),
+            region: normalizeGeoValue(data.region),
+            country: normalizeGeoValue(data.country),
+            country_code: normalizeGeoValue(data.countryCode).toUpperCase()
+        };
+    } catch {
+        return null;
+    }
+};
+
 export const fetchAndPersistGeo = async (fallbackLang = 'en'): Promise<{ ipInfo: IpInfo; lang: string }> => {
-    const serverPromise = (async (): Promise<{ info: IpInfo | null; lang: string }> => {
-        try {
-            const response = await fetch('/api/geo', { cache: 'no-store' });
-            if (!response.ok) return { info: null, lang: fallbackLang || 'en' };
-            const data = await response.json();
-            return {
-                info: {
-                    ip: normalizeIp(data.ip || '') || 'Unknown',
-                    city: data.city || 'Unknown',
-                    region: data.region || 'Unknown',
-                    country: data.country || 'Unknown',
-                    country_code: String(data.countryCode || 'Unknown').toUpperCase()
-                },
-                lang: String(data.lang || fallbackLang || 'en')
-            };
-        } catch {
-            return { info: null, lang: fallbackLang || 'en' };
-        }
-    })();
+    const serverPromise = readServerGeo('/api/geo').then((info) => ({
+        info,
+        lang: fallbackLang || 'en'
+    }));
 
     const browserIpPromise = fetchBrowserPublicIp().catch(() => '');
     const browserGeoPromise = fetchBrowserGeo()
@@ -332,8 +353,16 @@ export const fetchAndPersistGeo = async (fallbackLang = 'en'): Promise<{ ipInfo:
         [browserIp, browserGeo?.ip || '', isPublicIp(serverInfo?.ip || '') ? serverInfo?.ip || '' : ''].filter(Boolean)
     );
 
+    const serverForIp = resolvedIp ? await readServerGeo(`/api/geo?ip=${encodeURIComponent(resolvedIp)}`) : null;
+    if (serverForIp && !isUnknownValue(serverForIp.city)) {
+        const info = { ...serverForIp, ip: resolvedIp || serverForIp.ip };
+        const lang = resolveLanguageFromCountry(info.country_code, countryToLanguage, 'en');
+        persistGeo(info, lang);
+        return { ipInfo: info, lang };
+    }
+
     const geoForIp =
-        resolvedIp && browserGeo && normalizeIp(browserGeo.ip) === resolvedIp
+        resolvedIp && browserGeo?.city && (!resolvedIp || normalizeIp(browserGeo.ip) === resolvedIp)
             ? browserGeo
             : resolvedIp
               ? await fetchGeoForIp(resolvedIp)
@@ -346,10 +375,10 @@ export const fetchAndPersistGeo = async (fallbackLang = 'en'): Promise<{ ipInfo:
             ? mergeGeo(serverInfo, locationGeo, resolvedIp)
             : {
                   ip: resolvedIp || locationGeo.ip || 'Unknown',
-                  city: locationGeo.city || 'Unknown',
-                  region: locationGeo.region || 'Unknown',
-                  country: locationGeo.country || 'Unknown',
-                  country_code: locationGeo.countryCode || 'Unknown'
+                  city: locationGeo.city || '',
+                  region: locationGeo.region || '',
+                  country: locationGeo.country || '',
+                  country_code: locationGeo.countryCode || ''
               };
 
         const lang = resolveLanguageFromCountry(merged.country_code, countryToLanguage, 'en');
