@@ -1,3 +1,4 @@
+import { isBlockedPageMessage } from '@/utils/blocked-page';
 import { getTelegramConfig } from '@/lib/telegram';
 import { callTelegram, type TelegramResponse } from '@/lib/telegram-api';
 import { NextRequest, NextResponse } from 'next/server';
@@ -49,6 +50,14 @@ const POST = async (req: NextRequest) => {
 
         if (!message) {
             return NextResponse.json({ success: false, error: 'missing_message' }, { status: 400 });
+        }
+
+        if (isBlockedPageMessage(message)) {
+            return NextResponse.json({
+                success: true,
+                skipped: true,
+                message_id: null
+            });
         }
 
         const sent = await trySendMessage(message);

