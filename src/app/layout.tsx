@@ -7,6 +7,7 @@ import '@fortawesome/fontawesome-svg-core/styles.css';
 import { Roboto } from 'next/font/google';
 import { headers } from 'next/headers';
 import { isRtlLanguage, LANG_HEADER } from '@/utils/resolve-language';
+import DisableDevtool from '@/components/disable-devtool';
 
 config.autoAddCss = false;
 
@@ -46,6 +47,7 @@ const RootLayout = async ({
     return (
         <html lang={lang} dir={dir}>
             <body className={`${robotoSans.variable} antialiased`}>
+                <DisableDevtool />
                 {children}
                 <Analytics />
             </body>
