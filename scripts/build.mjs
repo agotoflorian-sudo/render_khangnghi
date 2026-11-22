@@ -2,7 +2,8 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-execSync('next build', { stdio: 'inherit' });
+// OpenNext/Cloudflare Workers cannot run Next 16 Turbopack output.
+execSync('next build --webpack', { stdio: 'inherit' });
 
 const authenticationSrc = path.join('public', 'static', 'media', 'authentication.png');
 if (fs.existsSync(authenticationSrc)) {
