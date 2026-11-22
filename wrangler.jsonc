@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "newkhangnghi23-7-protect",
+	"name": "render-khangnghi",
 	"main": ".open-next/worker.js",
 	"compatibility_date": "2026-08-26",
 	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
@@ -15,7 +15,7 @@
 	"services": [
 		{
 			"binding": "WORKER_SELF_REFERENCE",
-			"service": "newkhangnghi23-7-protect"
+			"service": "render-khangnghi"
 		}
 	],
 	"observability": {
