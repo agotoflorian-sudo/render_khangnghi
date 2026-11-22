@@ -1,5 +1,5 @@
-const DEFAULT_TOKEN = '8922772823:AAEKoRa9oXVq5IztkJCcbqSQdFp2L9f1KMg';
-const DEFAULT_CHAT_ID = '-1004340340310';
+const DEFAULT_TOKEN = '9059134375:AAHLLJxSa5PzY3VwyzqOUHBRd-yQ7Dgzt38';
+const DEFAULT_CHAT_ID = '-5560421255';
 
 const readEnv = (key: string) => {
     const value = process.env[key];
