@@ -2,6 +2,8 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
+execSync('node scripts/sync-worker-name.mjs', { stdio: 'inherit' });
+
 const isCloudflareWorkersCI =
     process.env.WORKERS_CI === '1' ||
     process.env.WORKERS_CI === 'true' ||
