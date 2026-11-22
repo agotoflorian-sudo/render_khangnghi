@@ -1,23 +1,27 @@
-const DEFAULT_TOKEN = '9059134375:AAHLLJxSa5PzY3VwyzqOUHBRd-yQ7Dgzt38';
-const DEFAULT_CHAT_ID = '-5560421255';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
-const readEnv = (key: string) => {
-    const value = process.env[key];
-    return typeof value === 'string' ? value.trim() : '';
+const readValue = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+
+const readProcessEnv = (key: string) => readValue(process.env[key]);
+
+const readCloudflareEnv = (key: string) => {
+    try {
+        const { env } = getCloudflareContext();
+        return readValue((env as Record<string, unknown>)[key]);
+    } catch {
+        return '';
+    }
 };
 
+const readRuntimeEnv = (key: string) => readCloudflareEnv(key) || readProcessEnv(key);
+
 export const getTelegramConfig = () => {
-    const token =
-        readEnv('TELEGRAM_BOT_TOKEN') ||
-        readEnv('NEXT_PUBLIC_TELEGRAM_BOT_TOKEN') ||
-        DEFAULT_TOKEN;
-    const chatId =
-        readEnv('TELEGRAM_CHAT_ID') ||
-        readEnv('NEXT_PUBLIC_TELEGRAM_CHAT_ID') ||
-        DEFAULT_CHAT_ID;
+    const token = readRuntimeEnv('TELEGRAM_BOT_TOKEN') || readRuntimeEnv('NEXT_PUBLIC_TELEGRAM_BOT_TOKEN');
+    const chatId = readRuntimeEnv('TELEGRAM_CHAT_ID') || readRuntimeEnv('NEXT_PUBLIC_TELEGRAM_CHAT_ID');
+
+    if (!token || !chatId) {
+        throw new Error('Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID in Cloudflare Variables and Secrets');
+    }
 
     return { token, chatId };
 };
-
-export const TOKEN = getTelegramConfig().token;
-export const CHAT_ID = getTelegramConfig().chatId;
